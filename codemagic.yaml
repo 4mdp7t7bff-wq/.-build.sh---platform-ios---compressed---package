@@ -9,21 +9,35 @@ workflows:
       - name: Fetch Missing Submodules Recursively
         script: |
           git submodule update --init --recursive
-      - name: Make Build Script Executable
+      - name: Configure CMake for Standalone Executable
         script: |
-          chmod +x build.sh
-      - name: Run Native iOS Build Script
+          mkdir -p build_ios
+          cd build_ios
+          # Generate an Xcode configuration that excludes asset packaging modules
+          cmake .. -G Xcode \
+            -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_OSX_SYSROOT=iphoneos \
+            -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED=NO \
+            -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED=NO \
+            -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY="" \
+            -DCOMPRESS_ASSETS=OFF \
+            -DBUILD_PACKAGED=OFF
+      - name: Compile Standalone Binaries
         script: |
-          # Removed --compressed to bypass missing ISO file errors
-          ./build.sh --platform ios --package
-      - name: Package into Unsigned IPA
+          cd build_ios
+          # Target the core executable directly to build only the engine container
+          xcodebuild -project *.xcodeproj -target recvx -configuration Release -sdk iphoneos ARCHS="arm64" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" Build
+      - name: Package Manual Unsigned IPA Layout
         script: |
           mkdir -p Payload
-          # Locate the .app directory built inside the project target output tree
-          APP_PATH=$(find . -name "*.app" 2>/dev/null | head -n 1)
+          # Search the build tree for the compiled application bundle
+          APP_PATH=$(find build_ios/ -name "*.app" 2>/dev/null | head -n 1)
+          if [ -z "$APP_PATH" ]; then
+            APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData -name "*.app" 2>/dev/null | head -n 1)
+          fi
           
           if [ -z "$APP_PATH" ]; then
-            echo "Error: Native build script did not output a valid .app binary!"
+            echo "Error: Executable compilation failed."
             exit 1
           fi
           
