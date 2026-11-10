@@ -8,14 +8,16 @@ workflows:
     scripts:
       - name: Fetch Missing Submodules Recursively
         script: |
-          git submodule update --init --recursive
+          git submodule foreach --recursive git clean -xfd
+          git submodule update --init --recursive --force
       - name: Install System Dependencies
         script: |
           brew install cmake ninja pkg-config sdl2
       - name: Fix and Execute Native iOS Configuration
         script: |
+          rm -rf build_ios
           mkdir -p build_ios && cd build_ios
-          # Use Apple's native toolchain path configuration to fix the CMake 1 crash
+          # Clear out any legacy paths and point directly to standard iOS configurations
           cmake .. -G Xcode \
             -DCMAKE_SYSTEM_NAME=iOS \
             -DCMAKE_OSX_SYSROOT=iphoneos \
@@ -24,7 +26,8 @@ workflows:
             -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED=NO \
             -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY="" \
             -DCOMPRESS_ASSETS=OFF \
-            -DBUILD_PACKAGED=OFF
+            -DBUILD_PACKAGED=OFF \
+            -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY
       - name: Compile Unsigned Application Executable
         script: |
           cd build_ios
