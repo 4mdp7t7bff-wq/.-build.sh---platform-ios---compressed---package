@@ -5,19 +5,23 @@ workflows:
     instance_type: mac_mini_m1
     environment:
       xcode: 16.2
+    triggering:
+      events:
+        - push
     scripts:
-      - name: Fetch Missing Submodules Recursively
+      - name: Hard Reset Workspace Environment
         script: |
+          # Purge everything to stop Codemagic from using old cached build.sh commands
+          git clean -fxd
           git submodule foreach --recursive git clean -xfd
           git submodule update --init --recursive --force
-      - name: Install System Dependencies
+      - name: Deploy Mac Development Packages
         script: |
           brew install cmake ninja pkg-config sdl2
-      - name: Fix and Execute Native iOS Configuration
+      - name: Force Custom iOS Project Layout
         script: |
-          rm -rf build_ios
           mkdir -p build_ios && cd build_ios
-          # Clear out any legacy paths and point directly to standard iOS configurations
+          # Hard-coding absolute paths so CMake cannot look for missing assets
           cmake .. -G Xcode \
             -DCMAKE_SYSTEM_NAME=iOS \
             -DCMAKE_OSX_SYSROOT=iphoneos \
@@ -28,7 +32,7 @@ workflows:
             -DCOMPRESS_ASSETS=OFF \
             -DBUILD_PACKAGED=OFF \
             -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY
-      - name: Compile Unsigned Application Executable
+      - name: Build Standalone Executable Binary
         script: |
           cd build_ios
           X_PROJ=$(find . -maxdepth 1 -name "*.xcodeproj" | head -n 1)
@@ -52,3 +56,4 @@ workflows:
           mv recvx_unsigned.ipa build/ios/ipa/
     artifacts:
       - build/ios/ipa/*.ipa
+
