@@ -9,23 +9,25 @@ workflows:
       events:
         - push
     scripts:
-      - name: Hard Reset Workspace Environment
+      - name: Reset Environment and Fetch Codebase
         script: |
-          # Purge everything to stop Codemagic from using old cached build.sh commands
           git clean -fxd
           git submodule foreach --recursive git clean -xfd
           git submodule update --init --recursive --force
-      - name: Deploy Mac Development Packages
+      - name: Deploy Mac Compiler Tools
         script: |
           brew install cmake ninja pkg-config sdl2
-      - name: Force Custom iOS Project Layout
+      - name: Download iOS SDK Toolchain Module
+        script: |
+          # Downloads a universal Apple toolchain module so CMake recognizes the platform layout
+          curl -L -o ios.toolchain.cmake https://githubusercontent.com
+      - name: Execute Native iOS Configuration
         script: |
           mkdir -p build_ios && cd build_ios
-          # Hard-coding absolute paths so CMake cannot look for missing assets
+          # Forces CMake to bypass checking system assets by treating the layout as a static library
           cmake .. -G Xcode \
-            -DCMAKE_SYSTEM_NAME=iOS \
-            -DCMAKE_OSX_SYSROOT=iphoneos \
-            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_TOOLCHAIN_FILE=../ios.toolchain.cmake \
+            -DPLATFORM=OS64 \
             -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED=NO \
             -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED=NO \
             -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY="" \
@@ -46,7 +48,7 @@ workflows:
           fi
           
           if [ -z "$APP_PATH" ]; then
-            echo "Error: Application binary could not be generated."
+            echo "Error: Code compilation failed."
             exit 1
           fi
           
@@ -56,4 +58,3 @@ workflows:
           mv recvx_unsigned.ipa build/ios/ipa/
     artifacts:
       - build/ios/ipa/*.ipa
-
