@@ -9,15 +9,16 @@ workflows:
       - name: Fetch Missing Submodules Recursively
         script: |
           git submodule update --init --recursive
-      - name: Install Missing Native Dependencies
+      - name: Install Correct Packaging Dependencies
         script: |
-          # Install vital build tools required for low-level C++ port configurations
-          brew install cmake ninja pkg-config SDL2
-      - name: Configure CMake for Standalone Executable
+          # Install the underlying compiler and system generation packages
+          brew install cmake ninja pkg-config sdl2
+      - name: Fix and Execute Native iOS Configuration
         script: |
-          mkdir -p build_ios
-          cd build_ios
-          # Initialize the iOS metadata tree and forcefully disable asset hooks
+          # Create clean isolated folders to keep CMake from getting confused
+          mkdir -p build_ios && cd build_ios
+          
+          # Initialize target configurations with strict compilation rules
           cmake .. -G Xcode \
             -DCMAKE_SYSTEM_NAME=iOS \
             -DCMAKE_OSX_SYSROOT=iphoneos \
@@ -25,22 +26,25 @@ workflows:
             -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED=NO \
             -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY="" \
             -DCOMPRESS_ASSETS=OFF \
-            -DBUILD_PACKAGED=OFF
-      - name: Compile Standalone Binaries
+            -DBUILD_PACKAGED=OFF \
+            -DCMAKE_BUILD_TYPE=Release
+      - name: Compile Unsigned Application Executable
         script: |
           cd build_ios
-          # Compile exclusively the engine container shell
-          xcodebuild -project *.xcodeproj -target recvx -configuration Release -sdk iphoneos ARCHS="arm64" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" Build
+          # Scan for generated xcode files and force cross-compilation target execution
+          X_PROJ=$(find . -maxdepth 1 -name "*.xcodeproj" | head -n 1)
+          xcodebuild -project "$X_PROJ" -target recvx -configuration Release -sdk iphoneos ARCHS="arm64" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" Build
       - name: Package Manual Unsigned IPA Layout
         script: |
           mkdir -p Payload
+          # Grab the fresh executable payload box out of the derived outputs
           APP_PATH=$(find build_ios/ -name "*.app" 2>/dev/null | head -n 1)
           if [ -z "$APP_PATH" ]; then
             APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData -name "*.app" 2>/dev/null | head -n 1)
           fi
           
           if [ -z "$APP_PATH" ]; then
-            echo "Error: Executable compilation failed."
+            echo "Error: Application binary could not be generated."
             exit 1
           fi
           
