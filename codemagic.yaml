@@ -6,17 +6,28 @@ workflows:
     environment:
       xcode: 16.2
     scripts:
+      - name: Generate Xcode Project via CMake
+        script: |
+          # Create a build directory and generate the Xcode project files
+          mkdir -p build_ios
+          cd build_ios
+          cmake .. -G Xcode \
+            -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_OSX_SYSROOT=iphoneos \
+            -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED=NO \
+            -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED=NO
       - name: Build Unsigned Xcode Project
         script: |
+          cd build_ios
           XCODE_PROJ=$(find . -maxdepth 1 -name "*.xcodeproj" | head -n 1)
           XCODE_WORKSPACE=$(find . -maxdepth 1 -name "*.xcworkspace" | head -n 1)
           
           if [ -n "$XCODE_WORKSPACE" ]; then
             SCHEME=$(xcodebuild -workspace "$XCODE_WORKSPACE" -list | sed -n '/Schemes:/,$p' | sed '1d' | tr -d ' ' | head -n 1)
-            xcodebuild -workspace "$XCODE_WORKSPACE" -scheme "$SCHEME" -configuration "Release" CODE_SIGNING_ALLOWED=NO
+            xcodebuild -workspace "$XCODE_WORKSPACE" -scheme "$SCHEME" -configuration "Release" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
           elif [ -n "$XCODE_PROJ" ]; then
             SCHEME=$(xcodebuild -project "$XCODE_PROJ" -list | sed -n '/Schemes:/,$p' | sed '1d' | tr -d ' ' | head -n 1)
-            xcodebuild -project "$XCODE_PROJ" -scheme "$SCHEME" -configuration "Release" CODE_SIGNING_ALLOWED=NO
+            xcodebuild -project "$XCODE_PROJ" -scheme "$SCHEME" -configuration "Release" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
           else
             echo "Error: No project found!"
             exit 1
@@ -24,11 +35,17 @@ workflows:
       - name: Package into Unsigned IPA
         script: |
           mkdir -p Payload
-          # Find the compiled app bundle and copy it
-          APP_PATH=$(find build/ -name "*.app" 2>/dev/null | head -n 1)
+          # Locate the built .app binary inside the CMake build tree
+          APP_PATH=$(find build_ios/ -name "*.app" 2>/dev/null | head -n 1)
           if [ -z "$APP_PATH" ]; then
             APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData -name "*.app" 2>/dev/null | head -n 1)
           fi
+          
+          if [ -z "$APP_PATH" ]; then
+            echo "Error: Compiled .app bundle not found!"
+            exit 1
+          fi
+          
           cp -r "$APP_PATH" Payload/
           zip -r recvx_unsigned.ipa Payload
           mkdir -p build/ios/ipa
