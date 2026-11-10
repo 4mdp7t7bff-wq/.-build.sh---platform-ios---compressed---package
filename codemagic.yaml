@@ -17,14 +17,10 @@ workflows:
       - name: Deploy Mac Compiler Tools
         script: |
           brew install cmake ninja pkg-config sdl2
-      - name: Download iOS SDK Toolchain Module
-        script: |
-          # Downloads a universal Apple toolchain module so CMake recognizes the platform layout
-          curl -L -o ios.toolchain.cmake https://githubusercontent.com
       - name: Execute Native iOS Configuration
         script: |
           mkdir -p build_ios && cd build_ios
-          # Forces CMake to bypass checking system assets by treating the layout as a static library
+          # Point DCMAKE_TOOLCHAIN_FILE to the local file we just created
           cmake .. -G Xcode \
             -DCMAKE_TOOLCHAIN_FILE=../ios.toolchain.cmake \
             -DPLATFORM=OS64 \
