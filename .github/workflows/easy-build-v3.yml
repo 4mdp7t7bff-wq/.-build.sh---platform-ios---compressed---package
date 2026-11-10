@@ -1,0 +1,37 @@
+name: Easy Unsigned IPA Generator V3
+
+on:
+  workflow_dispatch:
+
+jobs:
+  generate-ipa:
+    runs-on: macos-13 # Switches to Intel Mac runners to bypass server shortages
+    steps:
+      - name: Fetch Code
+        uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+
+      - name: Force Build Native App
+        run: |
+          xcodebuild build \
+            -workspace "project/ios/recvx.xcworkspace" \
+            -scheme "recvx-ios" \
+            -sdk iphoneos \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES
+
+      - name: Create IPA Structure
+        run: |
+          mkdir -p Payload
+          find ~/Library/Developer/Xcode/DerivedData -name "*.app" -type d -exec cp -r {} Payload/ \;
+          zip -r RECVX-Unsigned.ipa Payload
+
+      - name: Download Link
+        uses: actions/artifacts@v4
+        with:
+          name: Easy-RECVX-IPA
+          path: RECVX-Unsigned.ipa
+
