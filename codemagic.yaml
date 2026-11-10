@@ -4,34 +4,34 @@ workflows:
     max_build_duration: 60
     instance_type: mac_mini_m1
     environment:
-      ios_signing:
-        provisioning_profiles:
-          - RECVX_Profile
-        certificates:
-          - RECVX_Certificate
-      xcode: 16.2 # Force a mature Xcode build environment to prevent target deprecation errors
+      xcode: 16.2
     scripts:
-      - name: Initialize keychain and code signing
+      - name: Build Unsigned Xcode Project
         script: |
-          keychain initialize
-          keychain add-certificates
-      - name: Build and Package Xcode Project
-        script: |
-          # Automatically detects whatever project file exists in your repository root
           XCODE_PROJ=$(find . -maxdepth 1 -name "*.xcodeproj" | head -n 1)
           XCODE_WORKSPACE=$(find . -maxdepth 1 -name "*.xcworkspace" | head -n 1)
           
           if [ -n "$XCODE_WORKSPACE" ]; then
-            # If a workspace exists, pull the default scheme and build it
             SCHEME=$(xcodebuild -workspace "$XCODE_WORKSPACE" -list | sed -n '/Schemes:/,$p' | sed '1d' | tr -d ' ' | head -n 1)
-            xcode-project build-ipa --workspace "$XCODE_WORKSPACE" --scheme "$SCHEME" --configuration "Release"
+            xcodebuild -workspace "$XCODE_WORKSPACE" -scheme "$SCHEME" -configuration "Release" CODE_SIGNING_ALLOWED=NO
           elif [ -n "$XCODE_PROJ" ]; then
-            # If it's a standard project file, pull the scheme and build it
             SCHEME=$(xcodebuild -project "$XCODE_PROJ" -list | sed -n '/Schemes:/,$p' | sed '1d' | tr -d ' ' | head -n 1)
-            xcode-project build-ipa --project "$XCODE_PROJ" --scheme "$SCHEME" --configuration "Release"
+            xcodebuild -project "$XCODE_PROJ" -scheme "$SCHEME" -configuration "Release" CODE_SIGNING_ALLOWED=NO
           else
-            echo "Error: No Xcode project or workspace file found in the root directory!"
+            echo "Error: No project found!"
             exit 1
           fi
+      - name: Package into Unsigned IPA
+        script: |
+          mkdir -p Payload
+          # Find the compiled app bundle and copy it
+          APP_PATH=$(find build/ -name "*.app" 2>/dev/null | head -n 1)
+          if [ -z "$APP_PATH" ]; then
+            APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData -name "*.app" 2>/dev/null | head -n 1)
+          fi
+          cp -r "$APP_PATH" Payload/
+          zip -r recvx_unsigned.ipa Payload
+          mkdir -p build/ios/ipa
+          mv recvx_unsigned.ipa build/ios/ipa/
     artifacts:
       - build/ios/ipa/*.ipa
